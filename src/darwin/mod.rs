@@ -277,26 +277,29 @@ static FONT_SMOOTHING_ENABLED: Lazy<bool> = Lazy::new(|| {
         let key = NSString::alloc(nil).init_str("AppleFontSmoothing");
         let value: id = msg_send![id::standardUserDefaults(), objectForKey: key];
 
-        if !msg_send![value, isKindOfClass: class!(NSNumber)] {
-            return true;
+        if msg_send![value, isKindOfClass: class!(NSNumber)] {
+            let num_type: id = msg_send![value, objCType];
+            if num_type == nil {
+                return true;
+            }
+
+            // NSNumber's objCType method returns one of these strings depending on the size:
+            // q = quad (long long), l = long, i = int, s = short.
+            // This is done to reject booleans, which are NSNumbers with an objCType of "c", but macOS
+            // does not treat them the same as an integer 0 or 1 for this setting, it just ignores it.
+            let int_specifiers: [&[u8]; 4] = [b"q", b"l", b"i", b"s"];
+            if !int_specifiers.contains(&CStr::from_ptr(num_type as *const i8).to_bytes()) {
+                return true;
+            }
+
+            let smoothing: id = msg_send![value, integerValue];
+            return smoothing as i64 != 0
+        } else if msg_send![value, isKindOfClass: class!(NSString)] {
+            let smoothing: i64 = msg_send![value, intValue];
+            return smoothing != 0;
         }
 
-        let num_type: id = msg_send![value, objCType];
-        if num_type == nil {
-            return true;
-        }
-
-        // NSNumber's objCType method returns one of these strings depending on the size:
-        // q = quad (long long), l = long, i = int, s = short.
-        // This is done to reject booleans, which are NSNumbers with an objCType of "c", but macOS
-        // does not treat them the same as an integer 0 or 1 for this setting, it just ignores it.
-        let int_specifiers: [&[u8]; 4] = [b"q", b"l", b"i", b"s"];
-        if !int_specifiers.contains(&CStr::from_ptr(num_type as *const i8).to_bytes()) {
-            return true;
-        }
-
-        let smoothing: id = msg_send![value, integerValue];
-        smoothing as i64 != 0
+        return true;
     })
 });
 
